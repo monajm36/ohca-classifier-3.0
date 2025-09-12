@@ -12,6 +12,7 @@ from .ohca_training_pipeline import (
     find_optimal_threshold,
     evaluate_on_test_set,
     save_model_with_metadata,
+    evaluate_model,  # This function exists in your file!
     
     # Legacy functions (backward compatible)
     create_training_sample,
@@ -46,8 +47,8 @@ from .ohca_inference import (
     OHCAInferenceDataset
 )
 
-__version__ = "3.0.0"
-__author__ = "Mona Moukaddem"
+__version__ = "3.0.0"  # Fixed: double underscores, not asterisks
+__author__ = "Mona Moukaddem"  # Fixed: double underscores, not asterisks
 
 print("NLP OHCA Classifier v3.0 loaded successfully!")
 EOF
