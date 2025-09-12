@@ -3,7 +3,7 @@ cat > src/__init__.py << 'EOF'
 NLP OHCA Classifier v3.0 - Improved Methodology
 """
 
-# Training pipeline imports - only import functions that actually exist
+# Training pipeline imports - only working functions
 from .ohca_training_pipeline import (
     # v3.0 improved functions
     create_patient_level_splits,
@@ -12,7 +12,6 @@ from .ohca_training_pipeline import (
     find_optimal_threshold,
     evaluate_on_test_set,
     save_model_with_metadata,
-    evaluate_model,  # This function exists in your file!
     
     # Legacy functions (backward compatible)
     create_training_sample,
@@ -27,14 +26,6 @@ from .ohca_training_pipeline import (
 
 # Inference imports
 from .ohca_inference import (
-    # v3.0 functions
-    load_ohca_model_with_metadata,
-    run_inference_with_optimal_threshold,
-    quick_inference_with_optimal_threshold,
-    process_large_dataset_with_optimal_threshold,
-    analyze_predictions_enhanced,
-    
-    # Legacy functions
     load_ohca_model,
     run_inference,
     quick_inference,
@@ -42,13 +33,11 @@ from .ohca_inference import (
     test_model_on_sample,
     get_high_confidence_cases,
     analyze_predictions,
-    
-    # Dataset class
     OHCAInferenceDataset
 )
 
-__version__ = "3.0.0"  # Fixed: double underscores, not asterisks
-__author__ = "Mona Moukaddem"  # Fixed: double underscores, not asterisks
+__version__ = "3.0.0"
+__author__ = "Mona Moukaddem"
 
 print("NLP OHCA Classifier v3.0 loaded successfully!")
 EOF
