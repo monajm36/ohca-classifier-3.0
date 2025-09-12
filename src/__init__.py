@@ -1,36 +1,53 @@
+cat > src/__init__.py << 'EOF'
 """
-NLP OHCA Classifier v3.0
-A BERT-based classifier for detecting Out-of-Hospital Cardiac Arrest (OHCA) cases
+NLP OHCA Classifier v3.0 - Improved Methodology
 """
+
+# Training pipeline imports - only import functions that actually exist
+from .ohca_training_pipeline import (
+    # v3.0 improved functions
+    create_patient_level_splits,
+    complete_improved_training_pipeline,
+    complete_annotation_and_train_v3,
+    find_optimal_threshold,
+    evaluate_on_test_set,
+    save_model_with_metadata,
+    
+    # Legacy functions (backward compatible)
+    create_training_sample,
+    prepare_training_data,
+    train_ohca_model,
+    complete_training_pipeline,
+    complete_annotation_and_train,
+    
+    # Dataset class
+    OHCATrainingDataset
+)
+
+# Inference imports
+from .ohca_inference import (
+    # v3.0 functions
+    load_ohca_model_with_metadata,
+    run_inference_with_optimal_threshold,
+    quick_inference_with_optimal_threshold,
+    process_large_dataset_with_optimal_threshold,
+    analyze_predictions_enhanced,
+    
+    # Legacy functions
+    load_ohca_model,
+    run_inference,
+    quick_inference,
+    process_large_dataset,
+    test_model_on_sample,
+    get_high_confidence_cases,
+    analyze_predictions,
+    
+    # Dataset class
+    OHCAInferenceDataset
+)
 
 __version__ = "3.0.0"
 __author__ = "Mona Moukaddem"
 
-# Only import functions that actually exist
-try:
-    from .ohca_training_pipeline import (
-        create_training_sample,
-        complete_training_pipeline,
-        complete_annotation_and_train
-    )
-    
-    from .ohca_inference import (
-        load_ohca_model,
-        quick_inference,
-        run_inference
-    )
-    
-    print("NLP OHCA Classifier v3.0 loaded successfully")
-    
-except ImportError as e:
-    print(f"Import warning: {e}")
-    print("Some functions may not be available")
-
-__all__ = [
-    "create_training_sample",
-    "complete_training_pipeline", 
-    "complete_annotation_and_train",
-    "load_ohca_model",
-    "quick_inference",
-    "run_inference"
-]
+print("NLP OHCA Classifier v3.0 loaded successfully!")
+EOF
