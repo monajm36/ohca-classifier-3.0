@@ -39,6 +39,28 @@ This package provides two main modules with v3.0 enhancements:
 - **Clinical Decision Support**: Evidence-based probability thresholds
 - **Backward Compatibility**: Works with both v3.0 and legacy models
 
+## Quick Start for Real Data
+
+### Step 1: Train on Your Labeled Data
+```bash
+# Prepare your data (if needed)
+python scripts/prepare_data.py labeled your_labeled_data.csv
+
+# Train the model
+python scripts/train_from_labeled_data.py your_labeled_data_prepared.csv
+```
+
+### Step 2: Apply to New Discharge Notes
+```bash
+# Prepare discharge notes (if needed)  
+python scripts/prepare_data.py discharge your_discharge_notes.csv
+
+# Apply model
+python scripts/predict_ohca.py ./trained_ohca_model your_discharge_notes_prepared.csv
+```
+
+See `scripts/` folder for ready-to-use workflows and `examples/` for detailed demonstrations.
+
 ## Installation
 
 ### Prerequisites
@@ -68,9 +90,7 @@ pip install -e .
 
 **Note for Windows users**: Replace `source .venv/bin/activate` with `.venv\Scripts\activate`
 
-## Quick Start
-
-### Training a New Model (v3.0 Methodology - RECOMMENDED)
+## Training a New Model (v3.0 Methodology - RECOMMENDED)
 
 ```python
 from src.ohca_training_pipeline import complete_improved_training_pipeline
@@ -270,6 +290,10 @@ ohca-classifier-3.0/
 │   ├── __init__.py
 │   ├── ohca_training_pipeline.py    # Enhanced v3.0 training workflow
 │   └── ohca_inference.py            # Enhanced v3.0 inference
+├── scripts/
+│   ├── train_from_labeled_data.py   # User-friendly training script
+│   ├── predict_ohca.py              # User-friendly prediction script
+│   └── prepare_data.py              # Data preparation helper
 ├── examples/
 │   ├── training_example.py          # v3.0 training examples
 │   ├── inference_example.py         # v3.0 inference examples
