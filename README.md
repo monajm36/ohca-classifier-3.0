@@ -36,8 +36,8 @@ This package provides two main modules:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/monajm36/nlp-ohca-classifier.git
-cd nlp-ohca-classifier
+git clone https://github.com/monajm36/ohca-classifier-3.0.git
+cd ohca-classifier-3.0
 ```
 
 2. Set up virtual environment:
@@ -261,7 +261,7 @@ If you use this code in your research, please cite:
     title={NLP OHCA Classifier: BERT-based Detection of Out-of-Hospital Cardiac Arrest in Medical Text},
     author={Mona Moukaddem},
     year={2025},
-    url={https://github.com/monajm36/nlp-ohca-classifier}
+    url={https://github.com/monajm36/ohca-classifier-3.0}
 }
 ```
 
@@ -275,11 +275,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## Support
-For questions or issues:
-- Check the [Issues](https://github.com/monajm36/nlp-ohca-classifier/issues) page
-- Create a new issue if needed
-- Review examples in the `examples/` folder
 
 ## Acknowledgments
 - PubMedBERT model from Microsoft Research
