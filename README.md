@@ -1,29 +1,43 @@
-# ohca-classifier-3.0
-BERT-based classifier for detecting Out-of-Hospital Cardiac Arrest (OHCA) cases in medical text
+# OHCA Classifier v3.0 - Improved Methodology
+BERT-based classifier for detecting Out-of-Hospital Cardiac Arrest (OHCA) cases in medical text with enhanced machine learning methodology
 
-## NLP OHCA Classifier 
-A BERT-based classifier for detecting Out-of-Hospital Cardiac Arrest (OHCA) cases in medical discharge notes using natural language processing.
+## NLP OHCA Classifier v3.0
+A BERT-based classifier for detecting Out-of-Hospital Cardiac Arrest (OHCA) cases in medical discharge notes using improved natural language processing methodology that addresses key methodological concerns in medical AI.
+
+## Key Improvements in v3.0
+
+This version implements significant methodological improvements based on data science best practices:
+
+**Patient-Level Data Splits** - Prevents data leakage by ensuring all notes from the same patient stay in one split  
+**Proper Train/Validation/Test** - Uses independent test set for unbiased evaluation  
+**Optimal Threshold Finding** - Finds and saves optimal decision threshold during training  
+**Larger Training Samples** - 800+ training samples instead of 264  
+**Enhanced Clinical Decision Support** - Improved confidence categories and workflow integration  
+**Unbiased Evaluation** - Eliminates threshold tuning on test data  
 
 ## Overview
-This package provides two main modules:
+This package provides two main modules with v3.0 enhancements:
 
-- **Training Pipeline** (`ohca_training_pipeline.py`) - Complete workflow from data annotation to model training
-- **Inference Module** (`ohca_inference.py`) - Apply pre-trained models to new datasets
+- **Training Pipeline** (`ohca_training_pipeline.py`) - Complete workflow with improved methodology
+- **Inference Module** (`ohca_inference.py`) - Apply models with optimal threshold support
 
 ## Features
 
-### Training Pipeline
-- **Intelligent Sampling**: Two-stage sampling strategy (keyword-enriched + random)
-- **Annotation Interface**: Generates Excel files for manual annotation with guidelines
+### Training Pipeline (Enhanced v3.0)
+- **Patient-Level Splits**: Prevents data leakage between training and test sets
+- **Dual Annotation Strategy**: Separate training and validation annotation files
+- **Intelligent Sampling**: Two-stage sampling strategy (keyword-enriched + random)  
+- **Larger Sample Sizes**: 800 training + 200 validation samples
 - **BERT-based Training**: Uses PubMedBERT optimized for medical text
-- **Class Balancing**: Handles imbalanced datasets with oversampling
-- **Comprehensive Evaluation**: Clinical metrics including sensitivity, specificity, PPV, NPV
+- **Optimal Threshold Finding**: Automatically finds best decision threshold
+- **Unbiased Evaluation**: Independent test set for reliable performance estimates
 
-### Inference Module
-- **Pre-trained Model Loading**: Easy loading of trained OHCA models
+### Inference Module (Enhanced v3.0)
+- **Optimal Threshold Usage**: Automatically uses threshold found during training
+- **Enhanced Clinical Priorities**: Improved confidence categories for clinical workflow
 - **Batch Processing**: Efficient inference on large datasets
-- **Clinical Decision Support**: Probability thresholds and confidence categories
-- **Quality Analysis**: Built-in tools for analyzing prediction patterns
+- **Clinical Decision Support**: Evidence-based probability thresholds
+- **Backward Compatibility**: Works with both v3.0 and legacy models
 
 ## Installation
 
@@ -56,101 +70,150 @@ pip install -e .
 
 ## Quick Start
 
-### Training a New Model
+### Training a New Model (v3.0 Methodology - RECOMMENDED)
+
 ```python
-from src.ohca_training_pipeline import create_training_sample, complete_annotation_and_train
+from src.ohca_training_pipeline import complete_improved_training_pipeline
 import pandas as pd
 
-# 1. Create annotation sample
-df = pd.read_csv("your_discharge_notes.csv")  # Must have: hadm_id, clean_text
-annotation_df = create_training_sample(df, output_dir="./annotation_interface")
+# Step 1: Create patient-level splits and annotation samples
+results = complete_improved_training_pipeline(
+    data_path="your_discharge_notes.csv",  # Must have: hadm_id, subject_id, clean_text
+    annotation_dir="./annotation_v3",
+    train_sample_size=800,    # Much larger than legacy
+    val_sample_size=200       # Separate validation sample
+)
 
-# 2. Manually annotate the Excel file (ohca_annotation.xlsx)
+# Step 2: Manually annotate BOTH Excel files:
+# - annotation_v3/train_annotation.xlsx (800 cases)
+# - annotation_v3/validation_annotation.xlsx (200 cases)
 # Label each case: 1=OHCA, 0=Non-OHCA
 
-# 3. Train model after annotation
-results = complete_annotation_and_train(
-    annotation_file="./annotation_interface/ohca_annotation.xlsx",
-    model_save_path="./my_ohca_model",
+# Step 3: Complete training (after annotation)
+from src.ohca_training_pipeline import complete_annotation_and_train_v3
+
+model_results = complete_annotation_and_train_v3(
+    train_annotation_file="./annotation_v3/train_annotation.xlsx",
+    val_annotation_file="./annotation_v3/validation_annotation.xlsx",
+    test_file="./annotation_v3/test_set_DO_NOT_ANNOTATE.csv",
+    model_save_path="./my_ohca_model_v3",
     num_epochs=3
 )
+
+print(f"Optimal threshold: {model_results['optimal_threshold']:.3f}")
+print(f"Model automatically uses this threshold during inference")
 ```
 
-### Using a Pre-trained Model
+### Using a Pre-trained v3.0 Model
+
 ```python
-from src.ohca_inference import quick_inference
+from src.ohca_inference import quick_inference_with_optimal_threshold
 import pandas as pd
 
-# Apply model to new data
+# Apply v3.0 model to new data (uses optimal threshold automatically)
 new_data = pd.read_csv("new_discharge_notes.csv")  # Must have: hadm_id, clean_text
-results = quick_inference(
-    model_path="./my_ohca_model",
+results = quick_inference_with_optimal_threshold(
+    model_path="./my_ohca_model_v3",  # v3.0 model with metadata
     data_path=new_data,
     output_path="ohca_predictions.csv"
 )
 
-# View high-confidence predictions
-high_confidence = results[results['ohca_probability'] >= 0.8]
-print(f"Found {len(high_confidence)} high-confidence OHCA cases")
+# Enhanced v3.0 results with clinical priorities
+immediate_review = results[results['clinical_priority'] == 'Immediate Review']
+priority_review = results[results['clinical_priority'] == 'Priority Review']
+
+print(f"Immediate review needed: {len(immediate_review)} cases")
+print(f"Priority review needed: {len(priority_review)} cases")
+print(f"Optimal threshold used: {results['optimal_threshold_used'].iloc[0]:.3f}")
+```
+
+### Backward Compatibility (Legacy Models)
+
+```python
+from src.ohca_inference import quick_inference
+
+# Works with both v3.0 and legacy models
+results = quick_inference(
+    model_path="./any_model",  # Auto-detects model version
+    data_path="new_data.csv"
+)
 ```
 
 ## Data Format
 
-### Input Requirements
+### Input Requirements (Enhanced for v3.0)
 Your CSV file must contain:
 - `hadm_id`: Unique identifier for each hospital admission
+- `subject_id`: Patient identifier (for patient-level splits to prevent data leakage)
 - `clean_text`: Preprocessed discharge note text
 
 **Example:**
+```csv
+hadm_id,subject_id,clean_text
+12345,101,"Chief complaint: Cardiac arrest at home. Patient found down by family..."
+12346,102,"Chief complaint: Chest pain. Patient presents with acute onset chest pain..."
+12347,101,"Follow-up visit. Patient doing well after recent arrest..."
 ```
-hadm_id,clean_text
-12345,"Chief complaint: Cardiac arrest at home. Patient found down by family..."
-12346,"Chief complaint: Chest pain. Patient presents with acute onset chest pain..."
+
+**If you don't have patient IDs**: Add this line to your preprocessing:
+```python
+df['subject_id'] = df['hadm_id']  # Use admission ID as patient ID
 ```
 
 ### Annotation Labels
-- `1`: OHCA case (cardiac arrest outside hospital)
-- `0`: Non-OHCA case (everything else, including all transfer cases)
+- `1`: OHCA case (cardiac arrest outside hospital, primary reason for admission)
+- `0`: Non-OHCA case (everything else, including transfers and historical arrests)
 
 ## Module Documentation
 
-### Training Pipeline (`ohca_training_pipeline.py`)
+### Training Pipeline (Enhanced v3.0)
 
-**Main Functions:**
-- `create_training_sample()` - Create balanced annotation sample
-- `prepare_training_data()` - Process annotations for training
-- `train_ohca_model()` - Train BERT-based classifier
-- `evaluate_model()` - Comprehensive performance evaluation
-- `complete_training_pipeline()` - End-to-end training workflow
+**Main v3.0 Functions (RECOMMENDED):**
+- `complete_improved_training_pipeline()` - Create patient-level splits and annotation samples
+- `complete_annotation_and_train_v3()` - Train with optimal threshold finding
+- `create_patient_level_splits()` - Create proper data splits
+- `find_optimal_threshold()` - Find optimal decision threshold
+- `evaluate_on_test_set()` - Unbiased final evaluation
 
-**Example Usage:**
+**Legacy Functions (Backward Compatible):**
+- `create_training_sample()` - Legacy single-file annotation
+- `complete_annotation_and_train()` - Legacy training workflow
+
+**Example Usage (v3.0):**
 ```python
-from src.ohca_training_pipeline import complete_training_pipeline
+from src.ohca_training_pipeline import complete_improved_training_pipeline
 
-# Complete training pipeline
-result = complete_training_pipeline(
+# Enhanced training with proper methodology
+result = complete_improved_training_pipeline(
     data_path="discharge_notes.csv",
-    annotation_dir="./annotation",
-    model_save_path="./trained_model"
+    annotation_dir="./annotation_v3",
+    train_sample_size=800,
+    val_sample_size=200
 )
 ```
 
-### Inference Module (`ohca_inference.py`)
+### Inference Module (Enhanced v3.0)
 
-**Main Functions:**
-- `load_ohca_model()` - Load pre-trained model
-- `run_inference()` - Full inference with analysis
-- `quick_inference()` - Simple inference function
-- `process_large_dataset()` - Handle large datasets in chunks
-- `test_model_on_sample()` - Test on specific text samples
+**Main v3.0 Functions (RECOMMENDED):**
+- `quick_inference_with_optimal_threshold()` - Uses optimal threshold automatically
+- `load_ohca_model_with_metadata()` - Load model with optimal threshold
+- `run_inference_with_optimal_threshold()` - Enhanced inference
+- `analyze_predictions_enhanced()` - Improved prediction analysis
 
-**Example Usage:**
+**Legacy Functions (Backward Compatible):**
+- `quick_inference()` - Auto-detects model version
+- `load_ohca_model()` - Basic model loading
+- `run_inference()` - Basic inference
+
+**Example Usage (v3.0):**
 ```python
-from src.ohca_inference import run_inference, load_ohca_model
+from src.ohca_inference import load_ohca_model_with_metadata, run_inference_with_optimal_threshold
 
-# Load model and run inference
-model, tokenizer = load_ohca_model("./trained_model")
-results = run_inference(model, tokenizer, new_data_df)
+# Load v3.0 model with optimal threshold
+model, tokenizer, optimal_threshold, metadata = load_ohca_model_with_metadata("./trained_model")
+
+# Run inference with optimal threshold
+results = run_inference_with_optimal_threshold(model, tokenizer, new_data_df, optimal_threshold)
 ```
 
 ## Model Architecture
@@ -159,10 +222,17 @@ results = run_inference(model, tokenizer, new_data_df)
 - **Max Sequence Length**: 512 tokens
 - **Optimization**: AdamW with linear learning rate scheduling
 - **Class Balancing**: Weighted loss + minority class oversampling
+- **Threshold Selection**: Optimal threshold found via validation set (v3.0)
 
 ## Performance Metrics
-The model reports comprehensive clinical metrics:
 
+### v3.0 Enhanced Evaluation
+The model provides unbiased performance estimates using:
+- **Independent test set** for final evaluation
+- **Optimal threshold** found on validation set only
+- **Patient-level splits** preventing data leakage
+
+**Clinical Metrics:**
 - **Sensitivity (Recall)**: Percentage of OHCA cases correctly identified
 - **Specificity**: Percentage of non-OHCA cases correctly identified
 - **Precision (PPV)**: When model predicts OHCA, percentage that are correct
@@ -172,30 +242,40 @@ The model reports comprehensive clinical metrics:
 
 ## Clinical Usage
 
-### Probability Thresholds
-- **≥0.9**: Very high confidence - Priority manual review
-- **0.7-0.9**: High confidence - Clinical review recommended
-- **0.3-0.7**: Uncertain - Manual review suggested
-- **<0.3**: Low probability - Likely non-OHCA
+### Enhanced v3.0 Clinical Decision Support
 
-### Workflow Integration
-1. Run inference on new discharge notes
-2. Prioritize high-confidence predictions for review
-3. Use medium-confidence cases for quality improvement
-4. Monitor low-confidence cases for false negatives
+**Clinical Priorities (v3.0):**
+- **Immediate Review**: Very high probability cases requiring urgent attention
+- **Priority Review**: High probability cases for clinical team review
+- **Clinical Review**: Medium-high probability cases above optimal threshold
+- **Consider Review**: Medium probability cases for potential review
+- **Routine Processing**: Low probability cases
+
+**Optimal Threshold Usage:**
+- Model automatically uses threshold found during validation
+- Consistent decision-making across all datasets
+- Better performance than static thresholds
+
+**Workflow Integration:**
+1. Run inference on new discharge notes (uses optimal threshold)
+2. Prioritize "Immediate Review" cases for urgent manual review
+3. Schedule "Priority Review" cases for clinical team evaluation
+4. Use "Clinical Review" cases for quality improvement
+5. Monitor routine cases for false negatives
 
 ## Repository Structure
 ```
-nlp-ohca-classifier/
+ohca-classifier-3.0/
 ├── src/
 │   ├── __init__.py
-│   ├── ohca_training_pipeline.py    # Training workflow
-│   └── ohca_inference.py            # Inference on new data
+│   ├── ohca_training_pipeline.py    # Enhanced v3.0 training workflow
+│   └── ohca_inference.py            # Enhanced v3.0 inference
 ├── examples/
-│   ├── training_example.py          # Complete training examples
-│   └── inference_example.py         # Inference usage examples
+│   ├── training_example.py          # v3.0 training examples
+│   ├── inference_example.py         # v3.0 inference examples
+│   └── clif_dataset_example.py      # Cross-institutional deployment
 ├── docs/
-│   └── annotation_guidelines.md     # Detailed annotation guidelines
+│   └── annotation_guidelines.md     # Enhanced annotation guidelines
 ├── requirements.txt
 ├── setup.py
 ├── README.md
@@ -204,64 +284,104 @@ nlp-ohca-classifier/
 
 ## Examples
 
-### Complete Training Example
+### Complete v3.0 Training Example
 ```bash
 cd examples
 python training_example.py
+# Choose option 1: v3.0 Training with Improved Methodology
 ```
 
-### Inference Examples
+### Enhanced v3.0 Inference Examples
 ```bash
 cd examples
 python inference_example.py
+# Choose option 1: v3.0 Inference with Optimal Threshold
+```
+
+### Cross-Institutional Deployment
+```bash
+cd examples
+python clif_dataset_example.py
+# Apply v3.0 model to external datasets
 ```
 
 ## Advanced Usage
 
-### Large Dataset Processing
+### Large Dataset Processing (v3.0)
 ```python
-from src.ohca_inference import process_large_dataset
+from src.ohca_inference import process_large_dataset_with_optimal_threshold
 
-# Process 100K+ records in chunks
-process_large_dataset(
-    model_path="./trained_model",
+# Process with optimal threshold automatically
+process_large_dataset_with_optimal_threshold(
+    model_path="./trained_model_v3",
     data_path="large_dataset.csv",
     output_path="results.csv",
     chunk_size=5000
 )
 ```
 
-### Model Testing
+### Model Testing with v3.0 Features
 ```python
 from src.ohca_inference import test_model_on_sample
 
-# Test on specific cases
+# Test with optimal threshold support
 test_cases = {
     'case1': "Chief complaint: Cardiac arrest at home...",
     'case2': "Chief complaint: Chest pain, no arrest..."
 }
 
-results = test_model_on_sample("./trained_model", test_cases)
+results = test_model_on_sample("./trained_model_v3", test_cases)
+# Results include optimal threshold predictions and clinical priorities
 ```
 
 ## Performance Benchmarks
-Typical performance on validation data:
-- **AUC-ROC**: 0.85-0.95
-- **Sensitivity**: 85-95%
-- **Specificity**: 85-95%
-- **F1-Score**: 0.7-0.9
+
+### v3.0 Methodology Performance
+Typical performance with improved methodology:
+- **AUC-ROC**: 0.85-0.95 (unbiased estimates)
+- **Sensitivity**: 85-95% (at optimal threshold)
+- **Specificity**: 85-95% (at optimal threshold)
+- **F1-Score**: 0.7-0.9 (optimized via validation)
+
+**Key Improvements over Legacy:**
+- **Unbiased evaluation** using independent test set
+- **Optimal threshold** provides better sensitivity/specificity balance
+- **Larger training sets** (800 vs 264) improve generalization
+- **Patient-level splits** prevent overoptimistic performance estimates
 
 *Performance varies based on data quality and annotation consistency*
+
+## Migration from Legacy Versions
+
+### Upgrading from Legacy to v3.0
+
+**Benefits of Upgrading:**
+- More reliable performance estimates
+- Better clinical decision support
+- Optimal threshold usage
+- Enhanced workflow integration
+
+**Migration Steps:**
+1. **Retrain with v3.0 methodology** using `complete_improved_training_pipeline()`
+2. **Add patient IDs** to your data (`subject_id` column)
+3. **Use v3.0 inference functions** for new predictions
+4. **Update workflows** to use clinical priorities
+
+**Backward Compatibility:**
+- Legacy models continue to work
+- Legacy functions automatically detect model version
+- Gradual migration supported
 
 ## Citation
 If you use this code in your research, please cite:
 
 ```bibtex
-@software{nlp_ohca_classifier,
-    title={NLP OHCA Classifier: BERT-based Detection of Out-of-Hospital Cardiac Arrest in Medical Text},
+@software{nlp_ohca_classifier_v3,
+    title={NLP OHCA Classifier v3.0: BERT-based Detection of Out-of-Hospital Cardiac Arrest with Enhanced Methodology},
     author={Mona Moukaddem},
     year={2025},
-    url={https://github.com/monajm36/ohca-classifier-3.0}
+    url={https://github.com/monajm36/ohca-classifier-3.0},
+    note={Enhanced methodology addressing data leakage, threshold optimization, and evaluation bias}
 }
 ```
 
@@ -275,9 +395,22 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
+## Support
+For questions or issues:
+- Check the [Issues](https://github.com/monajm36/ohca-classifier-3.0/issues) page
+- Create a new issue if needed
+- Review examples in the `examples/` folder
+
+## Methodology References
+The v3.0 improvements are based on established machine learning best practices:
+- Patient-level data splits prevent data leakage in healthcare AI
+- Proper train/validation/test methodology ensures unbiased evaluation
+- Optimal threshold finding improves clinical performance
+- Larger sample sizes enhance model generalization
 
 ## Acknowledgments
 - PubMedBERT model from Microsoft Research
 - MIMIC-III dataset for model development
 - Transformers library by Hugging Face
 - PyTorch for deep learning framework
+- Data science community for methodological guidance
