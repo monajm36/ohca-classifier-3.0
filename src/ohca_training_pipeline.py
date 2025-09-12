@@ -16,6 +16,7 @@ import random
 import os
 import json
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader
 from sklearn.utils import compute_class_weight, resample
 from sklearn.metrics import (
     confusion_matrix, accuracy_score, roc_auc_score, roc_curve,
@@ -466,92 +467,166 @@ def train_ohca_model(train_dataset, val_dataset, train_df, tokenizer,
     return model, tokenizer
 
 # =============================================================================
-# STEP 5: OPTIMAL THRESHOLD FINDING
+# STEP 6: MODEL EVALUATION
 # =============================================================================
 
-def find_optimal_threshold(model, tokenizer, val_df, device=DEVICE):
+def evaluate_model(model, val_dataset, save_results=True, results_path="./evaluation_results.txt"):
     """
-    Find optimal threshold using validation set only.
-    This addresses the data scientist's concern about threshold optimization.
+    Comprehensive model evaluation with clinical metrics
     
     Args:
         model: Trained model
-        tokenizer: Model tokenizer
-        val_df: Validation dataset with ground truth labels
-        device: Device for inference
-        
+        val_dataset: Validation dataset (OHCATrainingDataset)
+        save_results: Whether to save results to file
+        results_path: Path to save evaluation results
+    
     Returns:
-        tuple: (optimal_threshold, metrics_at_threshold)
+        dict: Comprehensive evaluation metrics
     """
-    print("🎯 Finding optimal threshold on validation set...")
+    print("📊 Evaluating model performance...")
     
     model.eval()
-    predictions = []
-    true_labels = val_df['label'].values
+    all_preds = []
+    all_labels = []
+    all_probs = []
     
-    # Get predictions on validation set
+    val_dataloader = DataLoader(val_dataset, batch_size=8, shuffle=False)
+    
     with torch.no_grad():
-        for text in tqdm(val_df['clean_text'], desc="Computing probabilities"):
-            inputs = tokenizer(
-                str(text), truncation=True, padding=True, 
-                max_length=512, return_tensors='pt'
-            ).to(device)
+        for batch in tqdm(val_dataloader, desc="Evaluating"):
+            input_ids = batch['input_ids'].to(DEVICE)
+            attention_mask = batch['attention_mask'].to(DEVICE)
+            labels = batch['labels'].to(DEVICE)
             
-            outputs = model(**inputs)
-            prob = F.softmax(outputs.logits, dim=-1)[0, 1].cpu().numpy()
-            predictions.append(prob)
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            logits = outputs.logits
+            probs = F.softmax(logits, dim=1)
+            
+            predictions = torch.argmax(logits, dim=1)
+            
+            all_preds.extend(predictions.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+            all_probs.extend(probs[:, 1].cpu().numpy())  # OHCA probabilities
     
-    predictions = np.array(predictions)
+    # Convert to numpy arrays
+    all_preds = np.array(all_preds)
+    all_labels = np.array(all_labels)
+    all_probs = np.array(all_probs)
     
-    # Find optimal threshold using ROC curve analysis
-    fpr, tpr, thresholds = roc_curve(true_labels, predictions)
-    
-    # Method 1: Youden's J statistic (maximize TPR - FPR)
-    j_scores = tpr - fpr
-    optimal_idx_youden = np.argmax(j_scores)
-    optimal_threshold_youden = thresholds[optimal_idx_youden]
-    
-    # Method 2: Maximize F1-score
-    f1_scores = []
-    for threshold in thresholds:
-        pred_binary = (predictions >= threshold).astype(int)
-        tp = np.sum((pred_binary == 1) & (true_labels == 1))
-        fp = np.sum((pred_binary == 1) & (true_labels == 0))
-        fn = np.sum((pred_binary == 0) & (true_labels == 1))
-        
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-        f1_scores.append(f1)
-    
-    optimal_idx_f1 = np.argmax(f1_scores)
-    optimal_threshold_f1 = thresholds[optimal_idx_f1]
-    
-    # Use F1-optimized threshold as default (better for imbalanced data)
-    optimal_threshold = optimal_threshold_f1
+    # Find optimal threshold using ROC curve
+    fpr, tpr, thresholds = roc_curve(all_labels, all_probs)
+    youden_j = tpr - fpr
+    optimal_idx = np.argmax(youden_j)
+    optimal_threshold = thresholds[optimal_idx]
     
     # Calculate metrics at optimal threshold
-    pred_binary = (predictions >= optimal_threshold).astype(int)
-    tn, fp, fn, tp = confusion_matrix(true_labels, pred_binary).ravel()
+    optimal_preds = (all_probs >= optimal_threshold).astype(int)
     
-    metrics = {
-        'threshold': optimal_threshold,
-        'threshold_youden': optimal_threshold_youden,
-        'accuracy': (tp + tn) / (tp + tn + fp + fn),
-        'sensitivity': tp / (tp + fn) if (tp + fn) > 0 else 0,
-        'specificity': tn / (tn + fp) if (tn + fp) > 0 else 0,
-        'precision': tp / (tp + fp) if (tp + fp) > 0 else 0,
-        'f1_score': f1_scores[optimal_idx_f1],
-        'npv': tn / (tn + fn) if (tn + fn) > 0 else 0,
-        'tp': tp, 'tn': tn, 'fp': fp, 'fn': fn
+    def calculate_metrics(y_true, y_pred):
+        if len(np.unique(y_true)) < 2:
+            print("⚠️  Warning: Only one class in validation set")
+            return None
+            
+        tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+        
+        accuracy = accuracy_score(y_true, y_pred)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        npv = tn / (tn + fn) if (tn + fn) > 0 else 0
+        
+        return {
+            'accuracy': accuracy, 'precision': precision, 'recall': recall,
+            'specificity': specificity, 'f1': f1, 'npv': npv,
+            'tn': tn, 'fp': fp, 'fn': fn, 'tp': tp
+        }
+    
+    # Calculate AUC
+    try:
+        auc = roc_auc_score(all_labels, all_probs)
+    except:
+        auc = 0.5
+        print("⚠️  Warning: Could not calculate AUC")
+    
+    # Get metrics for default 0.5 threshold and optimal threshold
+    default_metrics = calculate_metrics(all_labels, all_preds)
+    optimal_metrics = calculate_metrics(all_labels, optimal_preds)
+    
+    if optimal_metrics is None:
+        print("❌ Cannot evaluate - insufficient data")
+        return None
+    
+    # Create results summary
+    results_text = f"""
+===============================================================================
+🎯 OHCA CLASSIFIER EVALUATION RESULTS
+===============================================================================
+
+📊 Dataset Summary:
+  Validation set size: {len(all_labels)}
+  OHCA prevalence: {np.mean(all_labels):.1%}
+  AUC-ROC: {auc:.3f}
+  Optimal threshold: {optimal_threshold:.3f}
+
+🏥 Performance with Optimal Threshold:
+  Accuracy: {optimal_metrics['accuracy']:.1%}
+  Sensitivity (Recall): {optimal_metrics['recall']:.1%}
+  Specificity: {optimal_metrics['specificity']:.1%}
+  Precision (PPV): {optimal_metrics['precision']:.1%}
+  NPV: {optimal_metrics['npv']:.1%}
+  F1-Score: {optimal_metrics['f1']:.3f}
+
+📋 Confusion Matrix (Optimal Threshold):
+  True Negatives (TN): {optimal_metrics['tn']}
+  False Positives (FP): {optimal_metrics['fp']}
+  False Negatives (FN): {optimal_metrics['fn']} 
+  True Positives (TP): {optimal_metrics['tp']}
+
+🩺 Clinical Interpretation:
+  • When model predicts OHCA: {optimal_metrics['precision']:.1%} chance it's correct
+  • When model predicts non-OHCA: {optimal_metrics['npv']:.1%} chance it's correct
+  • Model catches {optimal_metrics['recall']:.1%} of true OHCA cases
+  • Model correctly rules out {optimal_metrics['specificity']:.1%} of non-OHCA cases
+
+⭐ Model Quality:
+"""
+    
+    if auc >= 0.8:
+        results_text += "  🟢 EXCELLENT: AUC ≥ 0.8 - Strong discriminative ability\n"
+    elif auc >= 0.7:
+        results_text += "  🟡 GOOD: AUC ≥ 0.7 - Acceptable discriminative ability\n"
+    else:
+        results_text += "  🔴 NEEDS IMPROVEMENT: AUC < 0.7 - Consider more training data\n"
+    
+    if optimal_metrics['f1'] >= 0.7:
+        results_text += "  🟢 GOOD F1-Score: ≥ 0.7 - Well-balanced performance\n"
+    elif optimal_metrics['f1'] >= 0.5:
+        results_text += "  🟡 MODERATE F1-Score: ≥ 0.5 - Reasonable performance\n"
+    else:
+        results_text += "  🟠 LOW F1-Score: < 0.5 - Consider model improvements\n"
+    
+    results_text += "==============================================================================="
+    
+    # Print results
+    print(results_text)
+    
+    # Save results
+    if save_results:
+        with open(results_path, 'w') as f:
+            f.write(results_text)
+        print(f"💾 Evaluation results saved to: {results_path}")
+    
+    return {
+        'auc': auc,
+        'optimal_threshold': optimal_threshold,
+        'optimal_metrics': optimal_metrics,
+        'default_metrics': default_metrics,
+        'probabilities': all_probs,
+        'predictions': optimal_preds,
+        'labels': all_labels,
+        'results_text': results_text
     }
-    
-    print(f"✅ Optimal threshold found: {optimal_threshold:.3f}")
-    print(f"   F1-Score at optimal threshold: {metrics['f1_score']:.3f}")
-    print(f"   Sensitivity: {metrics['sensitivity']:.3f}")
-    print(f"   Specificity: {metrics['specificity']:.3f}")
-    
-    return optimal_threshold, metrics
 
 # =============================================================================
 # STEP 6: FINAL TEST SET EVALUATION
