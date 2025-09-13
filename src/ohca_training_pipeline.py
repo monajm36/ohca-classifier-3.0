@@ -124,7 +124,7 @@ def create_training_sample(df, output_dir="./annotation_interface",
                           train_sample_size=800, val_sample_size=200):
     """
     Create separate annotation samples for training and validation to avoid bias.
-    This addresses the data scientist's concern about biased sampling.
+    This addresses the concern about biased sampling.
     
     Args:
         df: DataFrame with columns ['hadm_id', 'clean_text']
