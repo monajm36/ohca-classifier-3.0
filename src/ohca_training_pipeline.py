@@ -45,6 +45,25 @@ random.seed(RANDOM_STATE)
 print(f"Training Pipeline v3.0 - Using device: {DEVICE}")
 
 # =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+def convert_numpy_types(obj):
+    """Convert numpy types to native Python types for JSON serialization"""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
+
+# =============================================================================
 # STEP 1: IMPROVED DATA SPLITTING
 # =============================================================================
 
@@ -467,6 +486,86 @@ def train_ohca_model(train_dataset, val_dataset, train_df, tokenizer,
     return model, tokenizer
 
 # =============================================================================
+# STEP 5: OPTIMAL THRESHOLD FINDING
+# =============================================================================
+
+def find_optimal_threshold(model, tokenizer, val_df, device=DEVICE):
+    """
+    Find optimal threshold using validation set.
+    
+    Args:
+        model: Trained model
+        tokenizer: Model tokenizer
+        val_df: Validation dataframe with true labels
+        device: Device for inference
+        
+    Returns:
+        tuple: (optimal_threshold, validation_metrics)
+    """
+    print(f"🎯 Finding optimal threshold on validation set...")
+    
+    model.eval()
+    predictions = []
+    true_labels = val_df['label'].values
+    
+    # Get predictions on validation set
+    with torch.no_grad():
+        for text in tqdm(val_df['clean_text'], desc="Computing probabilities"):
+            inputs = tokenizer(
+                str(text), truncation=True, padding=True,
+                max_length=512, return_tensors='pt'
+            ).to(device)
+            
+            outputs = model(**inputs)
+            prob = F.softmax(outputs.logits, dim=-1)[0, 1].cpu().numpy()
+            predictions.append(prob)
+    
+    predictions = np.array(predictions)
+    
+    # Find optimal threshold using ROC curve (Youden's J statistic)
+    try:
+        fpr, tpr, thresholds = roc_curve(true_labels, predictions)
+        youden_j = tpr - fpr
+        optimal_idx = np.argmax(youden_j)
+        optimal_threshold = thresholds[optimal_idx]
+        auc = roc_auc_score(true_labels, predictions)
+    except Exception as e:
+        print(f"⚠️  Warning: Error computing ROC curve: {e}")
+        optimal_threshold = 0.5
+        auc = 0.5
+    
+    # Calculate metrics at optimal threshold
+    pred_binary = (predictions >= optimal_threshold).astype(int)
+    
+    try:
+        tn, fp, fn, tp = confusion_matrix(true_labels, pred_binary).ravel()
+    except:
+        # Handle edge case where only one class present
+        print("⚠️  Warning: Only one class in validation set")
+        tn, fp, fn, tp = 0, 0, 0, len(true_labels)
+    
+    # Calculate validation metrics
+    val_metrics = {
+        'accuracy': (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0,
+        'sensitivity': tp / (tp + fn) if (tp + fn) > 0 else 0,
+        'specificity': tn / (tn + fp) if (tn + fp) > 0 else 0,
+        'precision': tp / (tp + fp) if (tp + fp) > 0 else 0,
+        'f1_score': 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 0,
+        'npv': tn / (tn + fn) if (tn + fn) > 0 else 0,
+        'auc': auc,
+        'n_val_samples': len(val_df),
+        'val_ohca_prevalence': np.mean(true_labels),
+        'tp': int(tp), 'tn': int(tn), 'fp': int(fp), 'fn': int(fn)
+    }
+    
+    print(f"✅ Optimal threshold found: {optimal_threshold:.3f}")
+    print(f"   F1-Score at optimal threshold: {val_metrics['f1_score']:.3f}")
+    print(f"   Sensitivity: {val_metrics['sensitivity']:.3f}")
+    print(f"   Specificity: {val_metrics['specificity']:.3f}")
+    
+    return optimal_threshold, val_metrics
+
+# =============================================================================
 # STEP 6: MODEL EVALUATION
 # =============================================================================
 
@@ -629,7 +728,7 @@ def evaluate_model(model, val_dataset, save_results=True, results_path="./evalua
     }
 
 # =============================================================================
-# STEP 6: FINAL TEST SET EVALUATION
+# STEP 7: FINAL TEST SET EVALUATION
 # =============================================================================
 
 def evaluate_on_test_set(model, tokenizer, test_df, optimal_threshold, device=DEVICE):
@@ -688,7 +787,7 @@ def evaluate_on_test_set(model, tokenizer, test_df, optimal_threshold, device=DE
         'test_auc': auc,
         'n_test_samples': len(test_df),
         'test_ohca_prevalence': np.mean(true_labels),
-        'test_tp': tp, 'test_tn': tn, 'test_fp': fp, 'test_fn': fn
+        'test_tp': int(tp), 'test_tn': int(tn), 'test_fp': int(fp), 'test_fn': int(fn)
     }
     
     print(f"✅ Test set evaluation complete:")
@@ -701,7 +800,7 @@ def evaluate_on_test_set(model, tokenizer, test_df, optimal_threshold, device=DE
     return test_metrics
 
 # =============================================================================
-# STEP 7: MODEL SAVING WITH METADATA
+# STEP 8: MODEL SAVING WITH METADATA
 # =============================================================================
 
 def save_model_with_metadata(model, tokenizer, optimal_threshold, 
@@ -716,11 +815,15 @@ def save_model_with_metadata(model, tokenizer, optimal_threshold,
     model.save_pretrained(model_save_path)
     tokenizer.save_pretrained(model_save_path)
     
+    # Convert numpy types for JSON serialization
+    val_metrics_clean = convert_numpy_types(val_metrics)
+    test_metrics_clean = convert_numpy_types(test_metrics)
+    
     # Save metadata
     metadata = {
         'optimal_threshold': float(optimal_threshold),
-        'validation_metrics': val_metrics,
-        'test_metrics': test_metrics,
+        'validation_metrics': val_metrics_clean,
+        'test_metrics': test_metrics_clean,
         'model_version': '3.0',
         'model_name': MODEL_NAME,
         'training_date': pd.Timestamp.now().isoformat(),
@@ -733,15 +836,19 @@ def save_model_with_metadata(model, tokenizer, optimal_threshold,
         ]
     }
     
-    with open(os.path.join(model_save_path, 'model_metadata.json'), 'w') as f:
-        json.dump(metadata, f, indent=2)
+    try:
+        with open(os.path.join(model_save_path, 'model_metadata.json'), 'w') as f:
+            json.dump(metadata, f, indent=2)
+        print(f"✅ Model and metadata saved successfully!")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not save metadata: {e}")
+        print(f"✅ Model saved successfully (without metadata)")
     
-    print(f"✅ Model and metadata saved successfully!")
     print(f"   Optimal threshold: {optimal_threshold:.3f}")
     print(f"   Model version: 3.0 (Improved Methodology)")
 
 # =============================================================================
-# STEP 8: COMPLETE IMPROVED PIPELINE
+# STEP 9: COMPLETE IMPROVED PIPELINE
 # =============================================================================
 
 def complete_improved_training_pipeline(data_path, annotation_dir="./annotation_v3", 
@@ -915,10 +1022,45 @@ def complete_annotation_and_train(annotation_file, model_save_path="./trained_oh
     print("    For improved methodology, use complete_annotation_and_train_v3()")
     print("    This addresses data scientist feedback about bias and data leakage")
     
-    # Implement legacy training for compatibility
-    # ... (existing implementation)
-    
-    return {'message': 'Legacy method - please upgrade to v3.0 methodology'}
+    # Simple implementation for backward compatibility
+    try:
+        # Load single annotation file
+        df = pd.read_excel(annotation_file)
+        df = df.dropna(subset=['ohca_label'])
+        df['label'] = df['ohca_label'].astype(int)
+        
+        # Create simple train/val split
+        train_df, val_df = train_test_split(df, test_size=0.2, random_state=42, stratify=df['label'])
+        
+        # Initialize tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            
+        # Create datasets
+        train_dataset = OHCATrainingDataset(train_df, tokenizer)
+        val_dataset = OHCATrainingDataset(val_df, tokenizer)
+        
+        # Train model
+        model, tokenizer = train_ohca_model(train_dataset, val_dataset, train_df, tokenizer, num_epochs, model_save_path)
+        
+        # Find threshold
+        optimal_threshold, val_metrics = find_optimal_threshold(model, tokenizer, val_df)
+        
+        # Save with metadata
+        test_metrics = {'message': 'Legacy training method used', 'test_set_size': 0}
+        save_model_with_metadata(model, tokenizer, optimal_threshold, val_metrics, test_metrics, model_save_path)
+        
+        return {
+            'model_path': model_save_path,
+            'optimal_threshold': optimal_threshold,
+            'validation_metrics': val_metrics,
+            'message': 'Legacy method - please upgrade to v3.0 methodology'
+        }
+        
+    except Exception as e:
+        print(f"Legacy training failed: {e}")
+        return {'message': f'Legacy method failed: {e}'}
 
 # =============================================================================
 # EXAMPLE USAGE
